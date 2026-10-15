@@ -4,7 +4,7 @@ Mode: built-in image-generation tool, reference-image workflow.
 
 Saved asset: `public/assets/veeramani-face.png`.
 
-Reference: the user-supplied photograph attached to this conversation. Generated texture is front-projected onto a curved 3D head in `src/actors/HeroModel.js`; unseen views are modeled approximations.
+Reference: the user-supplied photograph attached to this conversation. The generated texture is projected from the front onto a sculpted 3D head and baked into a cylindrical head texture at load time (`src/actors/hero/HeroBuilder.js`, `bakeHeadTexture`). Unseen views are modelled approximations with procedural hair and skin.
 
 Exact generation prompt:
 

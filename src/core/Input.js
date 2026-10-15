@@ -1,27 +1,11 @@
-import * as THREE from "three";
-import { STATES, LEVELS, SWEETS } from "../config.js";
-import {
-  $,
-  clamp,
-  rand,
-  TAU,
-  v3,
-  fmt,
-  mats,
-  geos,
-  mat,
-  geo,
-  mesh,
-  group,
-  flatRing,
-  instanced,
-} from "../core/primitives.js";
+import { Vec2 } from "./math.js";
+import { $ } from "./primitives.js";
 class Input {
   constructor(game) {
     this.game = game;
     this.keys = new Set();
     this.pressed = new Set();
-    this.joy = new THREE.Vector2();
+    this.joy = new Vec2();
     this.pointer = null;
     this.throwHeld = false;
     this.touch =
@@ -121,7 +105,7 @@ class Input {
         (this.keys.has("KeyS") || this.keys.has("ArrowDown") ? 1 : 0) -
         (this.keys.has("KeyW") || this.keys.has("ArrowUp") ? 1 : 0) +
         this.joy.y;
-    const v = new THREE.Vector2(x, z);
+    const v = new Vec2(x, z);
     if (v.length() > 1) v.normalize();
     return v;
   }

@@ -11,6 +11,9 @@ const STATES = Object.freeze({
 const LEVELS = [
   {
     name: "Madurai Diwali Street",
+    mood: { top: 0x0a1430, horizon: 0x433f6e, glow: 0xff9a5a, stars: 1, fog: 0x2b3352, fogDensity: 0.013, sun: 0xc4ceff, sunIntensity: 2.1, hemiSky: 0xa9b8ff, hemiGround: 0x8a6048, hemiIntensity: 0.95, sunDir: [-0.5, 0.6, 0.35] },
+    surface: "cobble",
+    dust: 0x9aa0ad,
     short: "Madurai after dark",
     sky: 0x172e4a,
     ground: 0x526274,
@@ -25,6 +28,9 @@ const LEVELS = [
   },
   {
     name: "Ancient Tamil Kingdom",
+    mood: { top: 0x3d5a9a, horizon: 0xf2a676, glow: 0xffc080, stars: 0, fog: 0xd6a889, fogDensity: 0.01, sun: 0xffd9a8, sunIntensity: 3.0, hemiSky: 0xffe2c4, hemiGround: 0x8a6a4a, hemiIntensity: 0.75, sunDir: [-0.65, 0.42, -0.45] },
+    surface: "slab",
+    dust: 0xe0c494,
     short: "A kingdom of trouble",
     sky: 0xc98470,
     ground: 0xc4a475,
@@ -39,6 +45,9 @@ const LEVELS = [
   },
   {
     name: "Prehistoric Jungle",
+    mood: { top: 0x5f9ac0, horizon: 0xc3dcc4, glow: 0xfff0c0, stars: 0, fog: 0x8fb39b, fogDensity: 0.016, sun: 0xfff2d0, sunIntensity: 2.6, hemiSky: 0xd4f0dc, hemiGround: 0x3f5a35, hemiIntensity: 0.8, sunDir: [-0.4, 0.7, 0.2] },
+    surface: "soil",
+    dust: 0x8a7a5a,
     short: "Jurassic snack break",
     sky: 0x3f6970,
     ground: 0x52694c,
@@ -53,6 +62,9 @@ const LEVELS = [
   },
   {
     name: "Mars · The Last Laddu",
+    mood: { top: 0x1a1030, horizon: 0xb0605a, glow: 0xffb08a, stars: 0.8, fog: 0x8a4f55, fogDensity: 0.011, sun: 0xffd2b0, sunIntensity: 2.6, hemiSky: 0xffc2a8, hemiGround: 0x5a2a2a, hemiIntensity: 0.6, sunDir: [-0.6, 0.45, -0.3] },
+    surface: "regolith",
+    dust: 0xc0705a,
     short: "Next stop: Mars",
     sky: 0x291e40,
     ground: 0xb45d4d,

@@ -1,21 +1,5 @@
-import * as THREE from "three";
-import { STATES, LEVELS, SWEETS } from "../config.js";
-import {
-  $,
-  clamp,
-  rand,
-  TAU,
-  v3,
-  fmt,
-  mats,
-  geos,
-  mat,
-  geo,
-  mesh,
-  group,
-  flatRing,
-  instanced,
-} from "../core/primitives.js";
+import { STATES, LEVELS } from "../config.js";
+import { $, TAU, v3, fmt } from "../core/primitives.js";
 class HUD {
   constructor(game) {
     this.game = game;

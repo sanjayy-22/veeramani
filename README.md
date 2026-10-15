@@ -1,6 +1,6 @@
 # Mars Sweet Heist
 
-A complete four-era browser campaign starring Veeramani. The project uses Three.js, local assets, Web Audio, and a Vite production build.
+A complete four-era browser campaign starring Veeramani. It runs on the **Babylon.js** game engine (PBR materials, real-time shadows, bloom, SSAO, ACES tone mapping, skeletal animation) with local assets, Web Audio and a Vite production build. The earlier Three.js edition was replaced; `legacy/single-file.html` still holds the original prototype.
 
 ## Play on this PC
 
@@ -31,9 +31,17 @@ Coffee increases speed for 12 seconds. Jasmine attracts sweets for 14 seconds. A
 
 ## Character
 
-**Meet Veeramani** on the title screen opens a rotating full-body / face viewer. The hero has a curved 3D face mesh with nose and cheek relief, a photo-derived face texture, modeled hair and ears, articulated shoulders and elbows, blue shirt, white veshti, sandals and a cloth bag.
+**Meet Veeramani** on the title screen opens a rotating full-body / face viewer.
 
-The supplied photograph establishes the frontal likeness. The face texture was generated from that reference with the built-in image-generation tool. The profile, back of the head and body are approximations, not a photogrammetric scan. See `docs/character-art.md` for the exact prompt and asset provenance.
+Veeramani is a single continuous skinned mesh on a 21-bone skeleton. He was sculpted from signed-distance shapes, meshed with Surface Nets and baked offline into `public/assets/models.bin`. His head is a separate sculpt with a nose, brow, cheeks, lips and ears. At load time the supplied face texture is wrapped onto it, with procedural hair and skin on the sides and back. His blue shirt (pockets, placket, collar), white veshti with gold border, sandals, cross-body strap and spring-swinging cloth bag use woven-cotton PBR materials with sheen.
+
+He is animated procedurally: idle breathing and weight shifts, a distance-driven run cycle, jump and fall poses, landing squash, a dash lean, an overhand sparkler throw, a hurt recoil and a celebration wave. Footsteps raise dust and play sounds. The aliens are built the same way.
+
+The supplied photograph establishes the frontal likeness. The face texture was generated from that reference with the built-in image-generation tool. The profile, back of the head and body are modelled approximations, not a photogrammetric scan. See `docs/character-art.md` for the exact prompt and asset provenance, and `notes/comparison-character.md` for the pipeline.
+
+## Graphics quality
+
+Add `?quality=low`, `?quality=medium` or `?quality=high` to the address. Desktop defaults to high (MSAA, SSAO, sharpening, film grain); touch devices default to medium.
 
 ## Develop
 
@@ -44,20 +52,23 @@ npm install
 npm run dev
 npm test
 npm run build
+npm run bake   # only after editing src/actors/hero/heroDesign.js or src/actors/alienDesign.js
 ```
 
 `npm run preview` previews the production build. Vite's [official guide](https://vite.dev/guide/) describes its development/build workflow. Dependencies are locked in `package-lock.json`.
 
 ## Source map
 
-- `src/config.js`: stage targets, timing, speed and gravity.
-- `src/Game.js`: state machine, campaign transitions, snapshots, camera and projectiles.
-- `src/core/`: audio, input, particles, persistence and primitive helpers.
-- `src/actors/`: hero model, movement, thieves and Chief.
+- `src/config.js`: stage targets, timing, speed, gravity and each era's lighting mood.
+- `src/Game.js`: state machine, campaign transitions, snapshots, chase camera, shake and hit-stop, projectiles.
+- `src/engine/`: the only Babylon.js code. `babylon.js` (tree-shaken engine imports), `Renderer.js` (lights, shadows, sky shader, post-processing), `prims.js` (instanced geometry, PBR materials, textured slabs, labels), `textures.js` (procedural tileable PBR textures), `Particles.js` and `modelFormat.js`.
+- `src/core/`: audio, input, persistence, engine-neutral vector math.
+- `src/actors/`: player, thieves and Chief gameplay; `hero/` holds the SDF sculpt, mesher, skinning, builder and procedural animator.
 - `src/world/`: environment builders, authored extended routes, collectibles and courtyard.
 - `src/ui/`: HUD, journal, map and responsive styles.
-- `public/assets/veeramani-face.png`: local face texture.
-- `tests/campaign.test.js`: production-code integration checks for progression, conservation, saves, boss, pause, movement and stun timing.
+- `public/assets/`: face texture and baked character meshes.
+- `tests/campaign.test.js`: integration checks for progression, conservation, saves, boss, pause, movement and stun timing. They run the real game and character rigs on Babylon's headless `NullEngine`.
+- `experiments/`, `notes/`, `visuals/`: the engine and character exploration (PlayCanvas spike, hero viewer, comparisons, before/after screenshots).
 - `legacy/single-file.html`: preserved earlier edition.
 
 Each level has 36 ground sweets, four carried per thief, and twelve extra in the Mars boss box. Keep that conservation rule when changing targets or layouts. Required sweets stay reachable from ground level; raised platforms hold optional tokens. One moving shadow light, fog, instanced sweets and decorations, a capped particle pool and a pixel-ratio limit keep rendering costs bounded.
@@ -68,4 +79,4 @@ This is original game code and original environment/alien art. It uses genre ide
 
 ## Verification limits
 
-The automated campaign traversal exercises the actual game systems with a lightweight rendering/DOM facade; it does not measure human difficulty or phone frame rates. Browser checks separately cover rendering, menus, the character viewer, courtyard, stage entry and responsive layout. This is a browser game project, not an Unreal/Unity photorealistic production or an exact recreation of either reference game.
+The automated campaign traversal exercises the actual game systems with a lightweight rendering/DOM facade; it does not measure human difficulty or phone frame rates. Browser checks separately cover rendering, menus, the character viewer, courtyard, stage entry and responsive layout. Screenshots in `visuals/` were captured with software rendering (SwiftShader). Frame rates on real GPUs and phones have not been measured. This is a browser game project, not an Unreal/Unity photorealistic production or an exact recreation of either reference game.

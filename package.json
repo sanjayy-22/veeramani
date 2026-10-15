@@ -7,10 +7,11 @@
     "dev": "vite --host 127.0.0.1 --port 8080",
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1 --port 8080",
-    "test": "node tests/campaign.test.js"
+    "test": "node tests/campaign.test.js",
+    "bake": "node tools/bake-models.mjs"
   },
   "dependencies": {
-    "three": "0.170.0"
+    "@babylonjs/core": "9.31.0"
   },
   "devDependencies": {
     "vite": "^7.3.0"

@@ -1,9 +1,11 @@
-import { loadCharacterAssets } from "./actors/HeroModel.js";
+import { loadCharacterAssets } from "./actors/hero/HeroBuilder.js";
 import "./ui/style.css";
 import { Game } from "./Game.js";
 import { $ } from "./core/primitives.js";
 try {
-  await loadCharacterAssets();
+  $("loadingText").textContent = "Sculpting Veeramani…";
+  await loadCharacterAssets(import.meta.env.BASE_URL);
+  $("loadingText").textContent = "Lighting the diyas…";
   const game = new Game();
   /* Read-only-friendly inspection entry point for browser QA. */ window.marsSweetHeist =
     game;
