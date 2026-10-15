@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#142c33" />
+    <title>Mars Sweet Heist — A Diwali adventure</title>
+  </head>
+  <body>
+    <canvas id="world" aria-label="Mars Sweet Heist 3D game"></canvas>
+    <div id="vignette"></div>
+    <div id="loading">
+      <div class="spinner"></div>
+      <b>One small step. One giant laddu.</b>
+      <p id="loadingText">Lighting the diyas…</p>
+      <noscript>Enable JavaScript to play Mars Sweet Heist.</noscript>
+    </div>
+    <button
+      class="sound"
+      id="mute"
+      aria-label="Mute audio"
+      aria-pressed="false"
+    >
+      ♫ SOUND ON
+    </button>
+    <main id="menu">
+      <div class="topline">
+        <div class="brand">
+          <span class="brandmark">✦</span> A LITTLE COSMIC MISCHIEF
+        </div>
+        <span class="pill">A DIWALI ADVENTURE</span>
+      </div>
+      <div class="hero-copy">
+        <div class="eyebrow">Madurai. Midnight. Missing sweets.</div>
+        <h1>
+          Mars<span>Sweet <em>Heist.</em></span>
+        </h1>
+        <p>
+          Six kinds of sweets. Four wildly different eras.<br />One very
+          determined Veeramani.<br />Those aliens picked the wrong Diwali.
+        </p>
+        <div class="actions">
+          <button id="play" class="primary">
+            Enter the courtyard <b>↗</b>
+          </button>
+          <button id="continueSave" class="secondary" hidden>
+            Continue checkpoint ↗
+          </button>
+          <div class="best">PERSONAL BEST<strong id="best">0</strong></div>
+        </div>
+        <div class="menu-controls">
+          <span><kbd>WASD</kbd> move</span><span><kbd>SPACE</kbd> jump</span
+          ><span><kbd>SHIFT</kbd> dash</span><span><kbd>E</kbd> sparkler</span>
+        </div>
+        <button
+          class="secondary"
+          id="helpButton"
+          style="margin: 17px 0 0; padding: 8px 13px"
+        >
+          How to play + sweet guide
+        </button>
+        <button
+          class="secondary"
+          id="heroButton"
+          style="margin: 8px 0 0; padding: 8px 13px"
+        >
+          Meet Veeramani
+        </button>
+      </div>
+      <div class="scene-note">“Just ONE more laddu!” — the aliens</div>
+      <div class="era-strip">
+        <div class="era active">
+          <span>01</span>
+          <div>
+            <strong>Madurai after dark</strong
+            ><small>Follow the sweet trail</small>
+          </div>
+        </div>
+        <div class="era">
+          <span>02</span>
+          <div>
+            <strong>A kingdom of trouble</strong
+            ><small>Mind the rolling pots</small>
+          </div>
+        </div>
+        <div class="era">
+          <span>03</span>
+          <div>
+            <strong>Jurassic snack break</strong
+            ><small>Make way for a big friend</small>
+          </div>
+        </div>
+        <div class="era">
+          <span>04</span>
+          <div>
+            <strong>Next stop: Mars</strong
+            ><small>Meet the chief of mischief</small>
+          </div>
+        </div>
+      </div>
+    </main>
+    <section id="heroView" aria-label="Veeramani character viewer" hidden>
+      <button class="secondary" id="heroBack">← Back</button>
+      <div class="hero-caption">
+        <div class="eyebrow">Madurai’s sweet defender</div>
+        <h2>Veeramani.</h2>
+        <p>A blue shirt. A white veshti. A bag full of determination.</p>
+        <button class="secondary" id="heroLeft" aria-label="Rotate hero left">
+          ↶ Turn
+        </button>
+        <button class="secondary" id="heroZoom">Face close-up</button>
+        <button class="secondary" id="heroRight" aria-label="Rotate hero right">
+          Turn ↷
+        </button>
+      </div>
+    </section>
+    <div id="hud" hidden>
+      <div class="hud-top">
+        <div class="level-card">
+          <small id="chapter">CHAPTER 01 / 04</small
+          ><strong id="levelName"></strong>
+          <p id="objective"></p>
+        </div>
+        <div class="stats">
+          <div class="stat">
+            <small>SWEETS</small><b class="gold" id="sweets">0 / 30</b>
+          </div>
+          <div class="stat">
+            <small id="caughtLabel">CAUGHT</small><b id="caught">0 / 3</b>
+          </div>
+          <div class="stat"><small>TIME</small><b id="timer">3:20</b></div>
+          <div class="stat"><small>LIVES</small><b id="lives">♥ 5</b></div>
+        </div>
+      </div>
+      <div class="boss-hud" id="bossHud" hidden>
+        <strong>THE ALIEN CHIEF</strong>
+        <div class="boss-track"><i id="bossBar"></i></div>
+        <small id="bossPhase">Watch for the golden opening!</small>
+      </div>
+      <div class="hud-bottom">
+        <div class="map-wrap">
+          <canvas id="map" width="248" height="292"></canvas
+          ><small>● SWEETS · ▲ THIEVES · ◇ PORTAL</small>
+        </div>
+        <div class="guide">
+          <kbd>W A S D</kbd> / arrows &nbsp; move &nbsp; <kbd>SPACE</kbd> jump
+          &nbsp; <kbd>SHIFT</kbd> dash
+          <div>
+            <kbd>E</kbd> / click &nbsp; sparkler · aims at nearby aliens
+          </div>
+        </div>
+        <div class="power">
+          <strong id="score">0 POINTS</strong
+          ><span id="powerText">Your bag is ready.</span>
+          <div class="dash-track"><i id="dashBar"></i></div>
+          <button id="pauseButton">Ⅱ PAUSE · ESC</button>
+        </div>
+      </div>
+    </div>
+    <aside id="journal" hidden aria-label="Campaign progress"></aside>
+    <div id="toast" role="status" hidden></div>
+    <div id="pickup" hidden></div>
+    <div id="flash"></div>
+    <div id="touch">
+      <div id="joystick" aria-label="Movement joystick">
+        <div id="stick"></div>
+      </div>
+      <div class="touch-buttons">
+        <button id="jumpTouch">JUMP</button><button id="dashTouch">DASH</button
+        ><button id="throwTouch">✦<br />SPARKLER</button>
+      </div>
+    </div>
+    <div id="pause" class="overlay" hidden>
+      <section class="modal">
+        <div class="eyebrow">A little coffee break</div>
+        <h2>The sweets can wait.</h2>
+        <p>
+          Move with WASD or arrows. Jump with Space, dash with Shift, and throw
+          with E or click. Stun an alien, then touch it within two seconds to
+          spill its stash.
+        </p>
+        <button class="primary" id="resume">Back to the chase <b>↗</b></button
+        ><br /><button class="secondary" id="restart">Retry checkpoint</button
+        ><button class="secondary" id="hubButton">Portal courtyard</button
+        ><button class="secondary" id="quit">Title screen</button>
+      </section>
+    </div>
+    <div id="help" class="overlay" hidden>
+      <section class="modal">
+        <div class="eyebrow">The sweet little field guide</div>
+        <h2>Stun. Catch. Collect.</h2>
+        <p>
+          Follow the looping thieves. Cut across corners, throw a sparkler
+          within 17 steps, then dash into a dizzy alien before its stars
+          disappear. Collect every sweet and enter the glowing portal. Jump over
+          hazards; dashing also gives a brief shield.
+        </p>
+        <div class="sweet-list">
+          <div>● Laddu <b>10</b></div>
+          <div>◎ Jalebi <b>15</b></div>
+          <div>▰ Mysore pak <b>20</b></div>
+          <div>● Gulab jamun <b>25</b></div>
+          <div>◉ Adhirasam <b>30</b></div>
+          <div>◆ Tirunelveli halwa <b>40</b></div>
+        </div>
+        <p>
+          ☕ Coffee: speed for 12s · ✿ Jasmine: magnet for 14s<br />🪔 Extra
+          Diya: one life · Esc: pause · E or click: throw<br />On touchscreens,
+          use the joystick and action buttons.
+        </p>
+        <button class="primary" id="helpClose">Got it <b>✓</b></button>
+      </section>
+    </div>
+    <div id="transition" class="overlay" hidden>
+      <section class="modal">
+        <div class="eyebrow" id="transitionLabel">THE TIME-PORTAL TRAIL</div>
+        <div class="route" id="route"></div>
+        <h2 id="transitionTitle"></h2>
+        <p id="transitionText"></p>
+        <button class="primary" id="continue">Into the portal <b>↗</b></button>
+      </section>
+    </div>
+    <div id="gameOver" class="overlay" hidden>
+      <section class="modal">
+        <div class="eyebrow">The chase isn’t over</div>
+        <h2 id="overTitle">A sweet setback.</h2>
+        <p id="overText"></p>
+        <button class="primary" id="retry">Retry this chapter <b>↻</b></button
+        ><br /><button class="secondary" id="overMenu">Title screen</button>
+      </section>
+    </div>
+    <div id="victory" class="overlay" hidden>
+      <section class="modal">
+        <div class="eyebrow">Madurai’s sweetest homecoming</div>
+        <h2>Diwali is saved!</h2>
+        <p>
+          Every sweet is home. The aliens have learned a valuable lesson: next
+          time, just ask for the recipe.
+        </p>
+        <div class="summary">
+          <div><b id="finalScore">0</b><small>POINTS</small></div>
+          <div><b id="finalTime">0:00</b><small>CHASE TIME</small></div>
+          <div><b id="finalSweets">212</b><small>SWEETS SAVED</small></div>
+        </div>
+        <p id="record"></p>
+        <button class="primary" id="again">One more adventure <b>↗</b></button
+        ><br /><button class="secondary" id="victoryHub">Replay eras</button
+        ><button class="secondary" id="victoryMenu">Title screen</button>
+      </section>
+    </div>
+    <script>
+      // A helpful error if the local bundle could not load.
+      window.bootTimer = setTimeout(() => {
+        document.getElementById("loadingText").textContent =
+          "Loading the adventure. If this persists, reload the page.";
+      }, 18000);
+    </script>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
