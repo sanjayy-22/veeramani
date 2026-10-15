@@ -1,78 +1,35 @@
 import { Campaign } from "./core/Campaign.js";
 import { Hub } from "./world/Hub.js";
-import * as THREE from "three";
-import { STATES, LEVELS, SWEETS } from "./config.js";
-import {
-  $,
-  clamp,
-  rand,
-  TAU,
-  v3,
-  fmt,
-  mats,
-  geos,
-  mat,
-  geo,
-  mesh,
-  group,
-  flatRing,
-  instanced,
-} from "./core/primitives.js";
+import { STATES, LEVELS } from "./config.js";
+import { $, rand, v3, fmt, mesh, group, place } from "./core/primitives.js";
+import { segmentPointDistance } from "./core/math.js";
+import { Renderer } from "./engine/Renderer.js";
+import { disposeChildren } from "./engine/prims.js";
+import { Particles } from "./engine/Particles.js";
 import { Audio } from "./core/Audio.js";
 import { Input } from "./core/Input.js";
-import { Particles } from "./core/Particles.js";
 import { Player } from "./actors/Player.js";
 import { Boss } from "./actors/Boss.js";
 import { Collectibles } from "./world/Collectibles.js";
 import { LevelBuilder } from "./world/LevelBuilder.js";
 import { HUD } from "./ui/HUD.js";
+import { lightCheckpoint } from "./world/CampaignRoutes.js";
 class Game {
   constructor() {
     this.state = STATES.MENU;
-    this.scene = new THREE.Scene();
-    this.world = new THREE.Group();
-    this.scene.add(this.world);
-    this.renderer = new THREE.WebGLRenderer({
-      canvas: $("world"),
-      antialias: true,
-      powerPreference: "high-performance",
-    });
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.6));
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.22;
-    this.camera = new THREE.PerspectiveCamera(
-      48,
-      innerWidth / innerHeight,
-      0.1,
-      140,
-    );
-    this.camera.position.set(14, 15, 28);
+    this.renderer = new Renderer($("world"));
+    this.scene = this.renderer.scene;
+    this.world = this.renderer.root;
+    this.camPos = v3(14, 15, 28);
     this.look = v3(0, 1, 0);
-    this.ambient = new THREE.HemisphereLight(0xc7dfff, 0x6d554d, 2.3);
-    this.scene.add(this.ambient);
-    this.sun = new THREE.DirectionalLight(0xffffff, 2);
-    this.sun.position.set(-12, 26, 13);
-    this.sun.castShadow = true;
-    this.sun.shadow.mapSize.set(1024, 1024);
-    Object.assign(this.sun.shadow.camera, {
-      left: -25,
-      right: 25,
-      top: 30,
-      bottom: -30,
-      near: 1,
-      far: 75,
-    });
-    this.sun.shadow.bias = -0.0007;
-    this.scene.add(this.sun);
-    this.scene.add(this.sun.target);
+    this.shake = 0;
+    this.hitstop = 0;
+    this.fovKick = 0;
     this.audio = new Audio();
     this.input = new Input(this);
     this.hud = new HUD(this);
     this.particles = new Particles(this.scene);
-    this.clock = new THREE.Clock();
+    this.lastTime = performance.now();
     this.elapsed = 0;
     this.totalTime = 0;
     this.score = 0;
@@ -96,8 +53,7 @@ class Game {
     this.menuScene();
     this.resize();
     window.addEventListener("resize", () => this.resize());
-    $("world").addEventListener("webglcontextlost", (e) => {
-      e.preventDefault();
+    this.renderer.engine.onContextLostObservable.add(() => {
       this.pause();
       $("loading").hidden = false;
       $("loadingText").textContent =
@@ -105,7 +61,7 @@ class Game {
     });
     clearTimeout(window.bootTimer);
     $("loading").hidden = true;
-    this.renderer.setAnimationLoop(() => this.frame());
+    this.renderer.engine.runRenderLoop(() => this.frame());
   }
   get playing() {
     return [STATES.PLAYING, STATES.BOSS, STATES.HUB].includes(this.state);
@@ -173,9 +129,7 @@ class Game {
       innerWidth < 700;
     this.input.touch = touch;
     document.body.classList.toggle("touch-enabled", touch);
-    this.renderer.setSize(innerWidth, innerHeight);
-    this.camera.aspect = innerWidth / innerHeight;
-    this.camera.updateProjectionMatrix();
+    this.renderer.resize();
   }
   closeHero() {
     this.heroView = false;
@@ -221,7 +175,7 @@ class Game {
     this.player = new Player(this);
     this.player.reset();
     this.input.reset();
-    this.camera.position.copy(this.player.pos).add(v3(0, 10.5, 15));
+    this.camPos.copy(this.player.pos).add(v3(0, 7.5, 12));
     this.look.copy(this.player.pos);
     $("hud").hidden = false;
     $("touch").classList.add("play");
@@ -321,21 +275,22 @@ class Game {
     }));
     this.collectibles.powerups.forEach((p, i) => {
       p.alive = snap.powers[i];
-      p.root.visible = p.alive;
+      p.root.setEnabled(p.alive);
     });
     this.builder.tokens.forEach((t, i) => {
       t.alive = snap.tokenAlive[i];
-      t.root.visible = t.alive;
+      t.root.setEnabled(t.alive);
     });
     this.builder.checkpoints.forEach((c, i) => {
-      c.active = snap.checkpoints[i];
+      if (snap.checkpoints[i]) lightCheckpoint(this.builder, c);
     });
     this.aliens.forEach((a, i) => {
       const saved = snap.aliens[i];
       a.pos.fromArray(saved.pos);
       for (const k of ["waypoint", "caught", "loot", "age", "dropClock"])
         a[k] = saved[k];
-      a.root.visible = !a.caught;
+      a.root.setEnabled(!a.caught);
+      place(a.root, a.pos);
     });
     this.checkpoint = snap;
     this.enterLevel(false);
@@ -366,8 +321,8 @@ class Game {
     this.audio.start();
     this.hideOverlays();
     // Start behind the hero immediately after the portal's cinematic camera.
-    this.camera.position.copy(this.player.pos).add(v3(0, 10.5, 15));
-    this.look.copy(this.player.pos).add(v3(0, 1.2, -4));
+    this.camPos.copy(this.player.pos).add(v3(0, 7.5, 12));
+    this.look.copy(this.player.pos).add(v3(0, 1.6, -4));
     this.state = STATES.PLAYING;
     if (save) this.saveCheckpoint();
     $("hud").hidden = false;
@@ -383,34 +338,19 @@ class Game {
     this.hud.update(0);
   }
   clearWorld() {
-    // Shared primitive resources survive chapter changes; dispose chapter-only geometry.
-    const keepGeo = new Set(geos.values()),
-      keepMat = new Set(mats.values());
-    const disposed = new Set();
-    this.world.traverse((o) => {
-      if (o.isInstancedMesh) o.dispose();
-      if (o.userData.disposeTexture) o.material?.map?.dispose();
-      if (o.geometry && !keepGeo.has(o.geometry) && !disposed.has(o.geometry)) {
-        o.geometry.dispose();
-        disposed.add(o.geometry);
-      }
-      if (o.material && !keepMat.has(o.material) && !disposed.has(o.material)) {
-        o.material.dispose();
-        disposed.add(o.material);
-      }
-    });
-    this.world.clear();
+    // Shared geometry sources and cached materials survive; level nodes go.
+    this.player?.rig.skeleton.dispose();
+    for (const a of this.aliens || []) a.rig.skeleton.dispose();
+    this.boss?.rig.skeleton.dispose();
+    disposeChildren(this.world);
     this.particles.clear();
     this.projectiles = [];
     this.boss = null;
+    this.aliens = [];
   }
   loadLevel(index) {
     this.clearWorld();
     this.bounds = { minX: -15.3, maxX: 15.3, minZ: -22, maxZ: 103 };
-    this.world.clear();
-    this.particles.clear();
-    this.projectiles = [];
-    this.boss = null;
     this.levelIndex = index;
     this.collected = 0;
     this.caught = 0;
@@ -421,7 +361,7 @@ class Game {
     this.builder.build(index);
     this.player = new Player(this);
     this.player.reset();
-    this.camera.position.set(0, 12, 32);
+    this.camPos.set(0, 12, 32);
     this.look.set(0, 1, 10);
     $("chapter").textContent =
       `CHAPTER ${String(index + 1).padStart(2, "0")} / 04`;
@@ -434,9 +374,11 @@ class Game {
   menuScene() {
     this.player.pos.set(5, 0, 13);
     this.player.root.rotation.y = 0.45;
+    place(this.player.root, this.player.pos);
     this.aliens[0].pos.set(8, 0, 10);
     this.aliens[1].pos.set(3, 0, 7);
     this.aliens[2].pos.set(11, 0, 4);
+    for (const a of this.aliens) place(a.root, a.pos);
   }
   menu() {
     this.hideOverlays();
@@ -557,7 +499,8 @@ class Game {
     )
       return;
     this.player.throwCooldown = 0.42;
-    const origin = this.player.pos.clone().add(v3(0, 1.5, 0));
+    this.player.rig.animator.throw();
+    const origin = this.player.pos.clone().add(v3(0, 2.3, 0));
     let target = null,
       best = 17;
     for (const a of this.aliens) {
@@ -574,10 +517,11 @@ class Game {
       ? target.pos.clone().add(v3(0, target instanceof Boss ? 1 : 0.9, 0))
       : origin.clone().addScaledVector(this.player.facing, 15);
     const direction = aim.sub(origin).normalize();
-    const root = group(this.world, ...origin.toArray());
+    const root = group(this.world, origin.x, origin.y, origin.z);
     mesh(root, "oct", 0xfff1bb, [0, 0, 0], [0.12, 0.36, 0.12], 1.8);
     this.projectiles.push({
       root,
+      pos: origin,
       velocity: direction.multiplyScalar(29),
       life: 0.8,
       target,
@@ -588,7 +532,7 @@ class Game {
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const p = this.projectiles[i];
       p.life -= dt;
-      const old = p.root.position.clone();
+      const old = p.pos.clone();
       if (p.target && !p.target.caught && !p.target.defeated) {
         const aim = p.target.pos
           .clone()
@@ -598,13 +542,11 @@ class Game {
           .multiplyScalar(29);
         p.velocity.lerp(aim, 1 - Math.exp(-9 * dt));
       }
-      p.root.position.addScaledVector(p.velocity, dt);
+      p.pos.addScaledVector(p.velocity, dt);
+      place(p.root, p.pos);
       p.root.rotation.x += dt * 18;
-      this.particles.emit(p.root.position, 0xffe39a, 2, 0.8, 0.3, 0.12);
-      const segment = new THREE.Line3(old, p.root.position),
-        nearest = v3();
-      const hit = (point, r) =>
-        segment.closestPointToPoint(point, true, nearest).distanceTo(point) < r;
+      this.particles.emit(p.pos, 0xffe39a, 2, 0.8, 0.3, 0.12);
+      const hit = (point, r) => segmentPointDistance(old, p.pos, point) < r;
       let impacted = false;
       for (const a of this.aliens) {
         if (!a.caught && hit(a.pos.clone().add(v3(0, 1, 0)), 0.85)) {
@@ -623,25 +565,47 @@ class Game {
           this.hud.toast("Shield up! Wait for the golden opening.", 1.1);
         impacted = true;
       }
+      if (impacted) {
+        this.particles.emit(p.pos, 0xfff1bb, 22, 4, 0.5, 0.2);
+        this.kick(0.25, 0.05);
+      }
       if (impacted || p.life <= 0) {
-        this.world.remove(p.root);
+        p.root.dispose(false, false);
         this.projectiles.splice(i, 1);
       }
     }
   }
+  /** Screen shake plus a few frames of hit-stop: weight for impacts. */
+  kick(shake = 0.4, stop = 0) {
+    this.shake = Math.max(this.shake, shake);
+    this.hitstop = Math.max(this.hitstop, stop);
+  }
+  chaseCamera(dt, rate = 4.5) {
+    const p = this.player.pos,
+      v = this.player.velocity;
+    const aheadX = Math.max(-2.5, Math.min(2.5, v.x * 0.22)),
+      aheadZ = Math.max(-3, Math.min(3, v.z * 0.3));
+    const target = v3(p.x * 0.85 + aheadX * 0.4, 7.4 + p.y * 0.4, p.z + 11.5 + aheadZ * 0.3);
+    const look = v3(p.x + aheadX, 1.7 + p.y * 0.45, p.z - 4 + aheadZ);
+    this.camPos.lerp(target, 1 - Math.exp(-rate * dt));
+    this.look.lerp(look, 1 - Math.exp(-(rate + 1.5) * dt));
+  }
   frame() {
-    const dt = Math.min(this.clock.getDelta(), 0.05);
+    const now = performance.now();
+    let dt = Math.min((now - this.lastTime) / 1000, 0.05);
+    this.lastTime = now;
+    if (this.fixedDelta) dt = this.fixedDelta;
     try {
+      // Hit-stop freezes simulation (not rendering) for a few frames.
+      if (this.hitstop > 0) {
+        this.hitstop -= dt;
+        dt *= 0.08;
+      }
       if (this.state === STATES.HUB) {
         this.elapsed += dt;
         this.player.update(dt);
         this.builder.update(dt);
-        const target = this.player.pos.clone().add(v3(0, 10.5, 15));
-        this.camera.position.lerp(target, 1 - Math.exp(-4.5 * dt));
-        this.look.lerp(
-          this.player.pos.clone().add(v3(0, 1.2, -3)),
-          1 - Math.exp(-6 * dt),
-        );
+        this.chaseCamera(dt);
       } else if (this.playing) {
         this.elapsed += dt;
         this.totalTime += dt;
@@ -682,43 +646,32 @@ class Game {
           this.player.pos.y < 3
         )
           this.finishLevel();
-        const target = this.player.pos.clone().add(v3(0, 10.5, 15)),
-          look = this.player.pos.clone().add(v3(0, 1.2, -4));
-        target.y = 10.5 + this.player.pos.y * 0.35;
-        look.y = 1.2 + this.player.pos.y * 0.3;
-        this.camera.position.lerp(target, 1 - Math.exp(-4.5 * dt));
-        this.look.lerp(look, 1 - Math.exp(-6 * dt));
+        if (this.playing) this.chaseCamera(dt);
       } else if (this.state === STATES.MENU || this.state === STATES.VICTORY) {
         this.elapsed += dt;
         this.builder.update(dt, true);
         this.collectibles.draw(this.elapsed);
-        this.player.body.position.y = Math.sin(this.elapsed * 2) * 0.06;
-        this.player.arms.forEach(
-          (a, i) => (a.rotation.x = Math.sin(this.elapsed * 2 + i) * 0.13),
-        );
-        this.aliens.forEach((a, i) => {
-          a.model.body.rotation.z = Math.sin(this.elapsed * 3 + i) * 0.1;
-          a.model.antennae.forEach(
-            (ant) => (ant.rotation.z = Math.sin(this.elapsed * 6 + i) * 0.2),
-          );
+        this.player.pose(dt, {
+          celebrate: this.state === STATES.VICTORY || (!this.heroView && this.elapsed % 9 > 6.5),
         });
+        this.aliens.forEach((a, i) => a.idle(this.elapsed + i));
         const mobile = innerWidth < 600,
           target = this.heroView
             ? this.player.pos
                 .clone()
-                .add(this.heroCloseup ? v3(0, 2.85, 1.65) : v3(0.35, 2.6, 5.6))
+                .add(this.heroCloseup ? v3(0, 2.85, 1.75) : v3(0.35, 2.3, 6.2))
             : mobile
-              ? v3(13, 12, 28)
-              : v3(20 + Math.sin(this.elapsed * 0.15), 15, 29);
-        this.camera.position.lerp(target, 1 - Math.exp(-2 * dt));
+              ? v3(10, 7, 24)
+              : v3(15 + Math.sin(this.elapsed * 0.15), 7.5, 24);
+        this.camPos.lerp(target, 1 - Math.exp(-2 * dt));
         this.look.lerp(
           this.heroView
             ? this.player.pos
                 .clone()
-                .add(this.heroCloseup ? v3(0, 2.78, 0) : v3(0, 1.5, 0))
+                .add(this.heroCloseup ? v3(0, 2.8, 0) : v3(0, 1.6, 0))
             : mobile
-              ? v3(1, 2, 7)
-              : v3(-2, 1, 3),
+              ? v3(3, 2.2, 9)
+              : v3(-1, 2.2, 6),
           1 - Math.exp(-2 * dt),
         );
         if (this.heroView)
@@ -729,30 +682,44 @@ class Game {
         this.elapsed += dt;
         this.transitionClock += dt;
         this.builder.update(dt, true);
-        this.camera.position.lerp(
-          v3(Math.sin(this.transitionClock * 0.4) * 7, 9, 1),
+        this.player.pose(dt, {});
+        this.camPos.lerp(
+          v3(Math.sin(this.transitionClock * 0.4) * 7, 6 + Math.sin(this.transitionClock * 0.2) * 2, 4),
           1 - Math.exp(-dt),
         );
-        this.look.lerp(v3(0, 2, -20), 1 - Math.exp(-dt * 2));
+        this.look.lerp(v3(0, 2.5, -20), 1 - Math.exp(-dt * 2));
       }
       const animated =
         this.state !== STATES.PAUSED && this.state !== STATES.GAME_OVER;
       this.particles.update(animated ? dt : 0);
       this.audio.update(animated);
       this.hud.update(dt);
-      this.sun.position.set(this.player.pos.x - 12, 26, this.player.pos.z + 13);
-      this.sun.target.position.copy(this.player.pos);
-      this.sun.target.updateMatrixWorld();
-      this.camera.lookAt(this.look);
-      this.renderer.render(this.scene, this.camera);
+      this.renderer.follow(this.player.pos);
+      this.applyCamera(dt);
+      if (!this.renderer.headless) this.renderer.render();
       this.input.endFrame();
     } catch (error) {
       console.error(error);
-      this.renderer.setAnimationLoop(null);
+      this.renderer.engine.stopRenderLoop();
       $("loading").hidden = false;
       $("loadingText").textContent =
         "The game encountered a graphics error. Reload to try again.";
     }
+  }
+  applyCamera(dt) {
+    const cam = this.renderer.camera;
+    this.shake = Math.max(0, this.shake - dt * 2.2);
+    const s = this.shake * this.shake,
+      t = this.elapsed * 37;
+    cam.position.set(
+      this.camPos.x + Math.sin(t) * s * 0.6,
+      this.camPos.y + Math.sin(t * 1.3 + 1) * s * 0.5,
+      this.camPos.z,
+    );
+    const dashing = this.player?.dashTime > 0 ? 1 : 0;
+    this.fovKick += ((dashing ? 0.14 : this.player?.coffee > 0 ? 0.05 : 0) - this.fovKick) * (1 - Math.exp(-8 * dt));
+    cam.fov = (innerWidth < innerHeight ? 1.05 : 0.86) + this.fovKick;
+    cam.setTarget(cam.position.clone().set(this.look.x, this.look.y, this.look.z));
   }
 }
 export { Game };

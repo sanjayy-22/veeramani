@@ -1,5 +1,6 @@
-import * as THREE from "three";
-import { group, mesh, flatRing, v3 } from "../core/primitives.js";
+import { group, mesh, flatRing, v3, label } from "../core/primitives.js";
+import { slab, surfaceMat, pbr } from "../engine/prims.js";
+import { textureSet } from "../engine/textures.js";
 import { LEVELS } from "../config.js";
 
 export class Hub {
@@ -12,11 +13,15 @@ export class Hub {
     this.age = 0;
     game.bounds = { minX: -20, maxX: 20, minZ: -20, maxZ: 19 };
     game.spawn = v3(0, 0, 13);
-    game.scene.background = new THREE.Color(0x172e4a);
-    game.scene.fog = new THREE.Fog(0x23394c, 30, 90);
-    mesh(game.world, "cylinder", 0x526574, [0, -0.35, 0], [29, 0.7, 29]);
-    flatRing(game.world, 0, 0, 9, 0xc5ad76).scale.z = 0.14;
-    flatRing(game.world, 0, 0, 8.4, 0x9c80b4).scale.z = 0.14;
+    game.renderer.setSky({ top: 0x0b1433, horizon: 0x3b3d72, glow: 0xc58cff, stars: 1, fog: 0x272c55, fogDensity: 0.011, sun: 0xb8c4ff, sunIntensity: 1.7, hemiSky: 0x9fb0ff, hemiGround: 0x5a4660, hemiIntensity: 0.65, sunDir: [-0.5, 0.6, 0.35] });
+    const floor = mesh(game.world, "cylinder", 0x526574, [0, -0.35, 0], [29, 0.7, 29], 0, {
+      solo: true,
+      material: surfaceMat("slab", 0x9c95a8, 0.85, textureSet),
+      cast: false,
+    });
+    floor.material.metadata = { shared: true };
+    flatRing(game.world, 0, 0, 9, 0xc5ad76).scaling.z = 0.14;
+    flatRing(game.world, 0, 0, 8.4, 0x9c80b4).scaling.z = 0.14;
     const positions = [
       [-12, 3],
       [-6, -10],
@@ -28,7 +33,7 @@ export class Hub {
         done = game.campaign.data.records[i];
       const root = group(game.world, x, 2.5, z),
         color = unlocked ? 0x9fe8d9 : 0x656b82;
-      mesh(
+      const ring = mesh(
         root,
         "torus",
         color,
@@ -36,10 +41,11 @@ export class Hub {
         [2.25, 2.6, 0.75],
         unlocked ? 0.8 : 0,
       );
-      const disc = mesh(root, "sphere", color, [0, 0, 0], [2, 2.3, 0.12], 0.2);
-      disc.material = disc.material.clone();
-      disc.material.transparent = true;
-      disc.material.opacity = unlocked ? 0.25 : 0.07;
+      const disc = mesh(root, "sphere", color, [0, 0, 0], [2, 2.3, 0.12], 0, {
+        solo: true,
+        cast: false,
+        material: pbr("hubDisc", { color, glow: unlocked ? 1.2 : 0.1, alpha: unlocked ? 0.25 : 0.07 }),
+      });
       mesh(game.world, "cylinder", 0x8b8a9e, [x, 0.1, z], [2.7, 0.2, 2.7]);
       this.label(
         `${i + 1}  ${["MADURAI", "KINGDOM", "JUNGLE", "MARS"][i]}`,
@@ -59,7 +65,7 @@ export class Hub {
         z,
         done ? "#ffdb80" : "#b8d3d8",
       );
-      this.portals.push({ root, x, z, index: i, unlocked });
+      this.portals.push({ root, ring, x, z, index: i, unlocked });
     });
     this.label("THE TIME COURTYARD", 0, 6, -19, "#f4dfb5");
     for (let i = 0; i < 28; i++) {
@@ -85,28 +91,12 @@ export class Hub {
     });
   }
   label(text, x, y, z, color) {
-    const c = document.createElement("canvas");
-    c.width = 768;
-    c.height = 96;
-    const ctx = c.getContext("2d");
-    ctx.fillStyle = color;
-    ctx.textAlign = "center";
-    ctx.font = "bold 40px sans-serif";
-    ctx.fillText(text, 384, 62);
-    const texture = new THREE.CanvasTexture(c);
-    texture.colorSpace = THREE.SRGBColorSpace;
-    const sprite = new THREE.Sprite(
-      new THREE.SpriteMaterial({ map: texture, depthTest: false }),
-    );
-    sprite.scale.set(8, 1, 1);
-    sprite.position.set(x, y, z);
-    sprite.userData.disposeTexture = true;
-    this.game.world.add(sprite);
+    return label(this.game.world, text, x, y, z, color);
   }
   update(dt) {
     this.age += dt;
     for (const p of this.portals) {
-      p.root.children[0].rotation.z += dt * (p.index % 2 ? -0.18 : 0.18);
+      p.ring.rotation.z += dt * (p.index % 2 ? -0.18 : 0.18);
       if (p.unlocked && Math.random() < dt * 18) {
         const a = Math.random() * Math.PI * 2;
         this.game.particles.emit(

@@ -1,22 +1,8 @@
 import { extendRoute, updateRoute } from "./CampaignRoutes.js";
-import * as THREE from "three";
-import { STATES, LEVELS, SWEETS } from "../config.js";
-import {
-  $,
-  clamp,
-  rand,
-  TAU,
-  v3,
-  fmt,
-  mats,
-  geos,
-  mat,
-  geo,
-  mesh,
-  group,
-  flatRing,
-  instanced,
-} from "../core/primitives.js";
+import { STATES, SWEETS } from "../config.js";
+import { rand, TAU, v3, mesh, group, flatRing, instanced } from "../core/primitives.js";
+import { slab, surfaceMat, pbr, sharedPbr } from "../engine/prims.js";
+import { textureSet } from "../engine/textures.js";
 import { Alien } from "../actors/Alien.js";
 import { Boss } from "../actors/Boss.js";
 class LevelBuilder {
@@ -31,14 +17,19 @@ class LevelBuilder {
     this.fireworkClock = 1;
   }
   solid(x, z, w, d, h, color) {
-    const m = mesh(this.game.world, "box", color, [x, h / 2, z], [w, h, d]);
+    const kind = this.game.config?.surface === "regolith" ? "regolith" : "plaster";
+    const m = slab(this.game.world, [x, h / 2, z], [w, h, d], surfaceMat(kind, color, 0.85, textureSet), 2);
     this.solids.push({ x, z, w, d, h });
     return m;
+  }
+  /** Textured wall/building block (no collision; scenery only). */
+  wall(x, y, z, w, h, d, color, kind = "plaster") {
+    return slab(this.game.world, [x, y, z], [w, h, d], surfaceMat(kind, color, 0.88, textureSet), 3);
   }
   hazard(type, x, z, r = 1, life = Infinity) {
     const root = group(this.game.world, x, 0, z);
     if (type === "pot") {
-      mesh(root, "sphere", 0xa8643b, [0, 0.55, 0], [r, 0.6, r]);
+      mesh(root, "sphere", 0xa8643b, [0, 0.55, 0], [r, 0.6, r], 0, { material: sharedPbr("pot", { color: 0xa8643b, rough: 0.55 }) });
       mesh(
         root,
         "torus",
@@ -55,6 +46,12 @@ class LevelBuilder {
             : type === "slime"
               ? 0x89bc48
               : 0x4689a0;
+      const look =
+        type === "puddle"
+          ? sharedPbr("puddle", { color: 0x2e5d70, rough: 0.05, metal: 0.2, alpha: 0.85 })
+          : type === "lava"
+            ? (this.lavaMat = sharedPbr("lava", { color: 0xff6c38, glow: 2.2, rough: 0.6 }))
+            : undefined;
       mesh(
         root,
         "cylinder",
@@ -62,6 +59,7 @@ class LevelBuilder {
         [0, 0.035, 0],
         [r, 0.07, type === "lava" ? r * 0.4 : r],
         type === "lava" ? 0.8 : 0.08,
+        look ? { material: look } : {},
       );
       if (type === "crater") flatRing(root, 0, 0, r, 0xdd8d69);
       if (type === "puddle") flatRing(root, 0, 0, r * 0.6, 0x8ec4c9);
@@ -73,24 +71,20 @@ class LevelBuilder {
     const g = this.game,
       c = g.config,
       w = g.world;
-    g.scene.background = new THREE.Color(c.sky);
-    g.scene.fog = new THREE.Fog(c.fog, 36, 95);
-    g.sun.color.set(index === 1 ? 0xffdeb0 : 0xffffff);
-    g.sun.intensity = index === 0 ? 2 : 2.5;
-    g.ambient.color.set(index === 2 ? 0xbde2cc : 0xc7dfff);
-    mesh(w, "box", c.ground, [0, -0.3, 0], [35, 0.6, 49]);
-    mesh(
+    g.renderer.setSky(c.mood);
+    const ground = surfaceMat(c.surface, c.ground, 0.92, textureSet);
+    slab(w, [0, -0.3, 0], [35, 0.6, 49], ground, 4);
+    slab(
       w,
-      "box",
-      index === 0
-        ? 0x72717b
-        : index === 1
-          ? 0xddc394
-          : index === 2
-            ? 0x7c8159
-            : 0xc47b61,
-      [0, -0.015, 0],
-      [7, 0.035, 43],
+      [0, -0.005, 0],
+      [7, 0.02, 43],
+      surfaceMat(
+        c.surface,
+        index === 0 ? 0x8a8a96 : index === 1 ? 0xe6cfa0 : index === 2 ? 0x8c8a62 : 0xd08868,
+        0.85,
+        textureSet,
+      ),
+      2,
     );
     const pebbles = [];
     for (let i = 0; i < 85; i++) {
@@ -111,15 +105,6 @@ class LevelBuilder {
       index === 2 ? 0x5b6c4b : index === 3 ? 0x91473f : 0x88888b,
       pebbles,
     );
-    const stars = [];
-    for (let i = 0; i < 110; i++)
-      stars.push([
-        rand(-70, 70),
-        rand(18, 52),
-        rand(-65, 5),
-        rand(0.025, 0.085),
-      ]);
-    instanced(w, "sphere", 0xffefd2, stars, 0.9);
     this.makePortal();
     if (index === 0) this.madurai();
     if (index === 1) this.kingdom();
@@ -180,13 +165,13 @@ class LevelBuilder {
       [0, 0, 0],
       [2.05, 2.35, 0.08],
     );
-    this.inner.material = new THREE.MeshBasicMaterial({
-      color: 0x69d3e4,
-      transparent: true,
-      opacity: 0.16,
-      depthWrite: false,
+    this.inner.dispose();
+    this.innerMat = pbr("portalInner", { color: 0x69d3e4, glow: 1.2, alpha: 0.16 });
+    this.inner = mesh(this.portal, "sphere", 0x74dbd5, [0, 0, 0], [2.05, 2.35, 0.08], 0, {
+      solo: true,
+      material: this.innerMat,
+      cast: false,
     });
-    this.inner.castShadow = false;
     this.swirls = [];
     for (let i = 0; i < 3; i++) {
       const ring = mesh(
@@ -210,7 +195,7 @@ class LevelBuilder {
         const z = 17 - j * 7,
           x = side * 19,
           h = rand(4.5, 7);
-        mesh(w, "box", colors[j % 4], [x, h / 2, z], [5, h, 5.7]);
+        this.wall(x, h / 2, z, 5, h, 5.7, colors[j % 4]);
         mesh(w, "box", 0xf6d4a1, [x, h, z], [5.4, 0.28, 6]);
         mesh(w, "box", 0x283f4b, [x - side * 2.54, 1.5, z], [0.08, 2.5, 1.2]);
         for (const zz of [-1.7, 1.7]) {
@@ -294,7 +279,7 @@ class LevelBuilder {
   }
   gopuram(x, z, s = 1) {
     const root = group(this.game.world, x, 0, z);
-    root.scale.setScalar(s);
+    root.scaling.setAll(s);
     for (let i = 0; i < 6; i++) {
       const width = 7 - i * 0.9,
         y = i * 1.45;
@@ -454,9 +439,10 @@ class LevelBuilder {
       t = g.elapsed;
     this.swirls.forEach((s, i) => {
       s.rotation.z += dt * (i % 2 ? -0.8 : 1.2);
-      s.scale.x = (1.4 + i * 0.27) * (1 + Math.sin(t * 2 + i) * 0.07);
+      s.scaling.x = (1.4 + i * 0.27) * (1 + Math.sin(t * 2 + i) * 0.07);
     });
-    this.inner.material.opacity = this.portalReady ? 0.4 : 0.12;
+    this.innerMat.alpha = this.portalReady ? 0.45 : 0.14;
+    this.innerMat.emissiveIntensity = this.portalReady ? 2.4 : 1.1;
     if (Math.random() < dt * 35) {
       const a = rand(0, TAU);
       g.particles.emit(
@@ -496,7 +482,7 @@ class LevelBuilder {
       h.age += dt;
       h.life -= dt;
       if (h.life <= 0) {
-        g.world.remove(h.root);
+        h.root.dispose(false, false);
         this.hazards.splice(i, 1);
         continue;
       }
@@ -505,9 +491,8 @@ class LevelBuilder {
         h.root.position.x = h.x;
         h.root.rotation.z -= dt * 3;
       }
-      if (h.type === "lava")
-        h.root.children[0].material.emissiveIntensity =
-          0.6 + Math.sin(t * 5) * 0.2;
+      if (h.type === "lava" && this.lavaMat)
+        this.lavaMat.emissiveIntensity = 1.9 + Math.sin(t * 5) * 0.5;
       const p = g.player.pos,
         dx = p.x - h.x,
         dz = p.z - h.z,

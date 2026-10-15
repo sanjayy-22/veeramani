@@ -1,21 +1,4 @@
-import * as THREE from "three";
-import { STATES, LEVELS, SWEETS } from "../config.js";
-import {
-  $,
-  clamp,
-  rand,
-  TAU,
-  v3,
-  fmt,
-  mats,
-  geos,
-  mat,
-  geo,
-  mesh,
-  group,
-  flatRing,
-  instanced,
-} from "../core/primitives.js";
+import { $ } from "./primitives.js";
 class Audio {
   constructor() {
     this.ctx = null;
@@ -115,6 +98,15 @@ class Audio {
       this.tone(80, 0.13, "sine", 0.14, 30);
     }
     if (name === "hurt") this.tone(260, 0.25, "triangle", 0.2, 90);
+    // Soft sandal footsteps and a weighty landing thud.
+    if (name === "step") {
+      this.noise(0.05, 0.035);
+      this.tone(95 + Math.random() * 20, 0.06, "sine", 0.05, 60);
+    }
+    if (name === "land") {
+      this.noise(0.12, 0.09);
+      this.tone(120, 0.16, "sine", 0.16, 45);
+    }
     if (name === "power")
       [440, 554, 660, 880].forEach((f, i) =>
         this.tone(f, 0.2, "sine", 0.12, f, i * 0.08),

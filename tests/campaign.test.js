@@ -1,11 +1,19 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import * as THREE from "three";
+import { readFileSync } from "node:fs";
 import { Campaign, SAVE_KEY } from "../src/core/Campaign.js";
 import { Game } from "../src/Game.js";
 import { STATES, LEVELS } from "../src/config.js";
 import { v3 } from "../src/core/primitives.js";
+import { Vec2 } from "../src/core/math.js";
+import { Renderer } from "../src/engine/Renderer.js";
+import { Particles } from "../src/engine/Particles.js";
+import { decodeModels } from "../src/engine/modelFormat.js";
+import { setModels } from "../src/actors/hero/HeroBuilder.js";
 
+// Real baked character data, so rigs and skinned meshes are built in tests too.
+const bin = readFileSync(new URL("../public/assets/models.bin", import.meta.url));
+setModels(decodeModels(bin.buffer.slice(bin.byteOffset, bin.byteOffset + bin.byteLength)));
 const noop = () => {};
 const elements = new Map();
 globalThis.document = {
@@ -32,25 +40,28 @@ function storage() {
 }
 function harness() {
   const g = Object.create(Game.prototype);
+  const renderer = new Renderer(null, { headless: true });
   Object.assign(g, {
-    scene: new THREE.Scene(),
-    world: new THREE.Group(),
-    sun: new THREE.DirectionalLight(),
-    ambient: new THREE.HemisphereLight(),
-    camera: new THREE.PerspectiveCamera(),
+    renderer,
+    scene: renderer.scene,
+    world: renderer.root,
+    camPos: v3(),
     look: v3(),
+    shake: 0,
+    hitstop: 0,
+    fovKick: 0,
+    lastTime: 0,
+    fixedDelta: 1 / 60,
     audio: { start: noop, play: noop, tone: noop, update: noop },
-    particles: { clear: noop, emit: noop, update: noop },
+    particles: new Particles(renderer.scene, true),
     hud: { toast: noop, pickup: noop, update: noop },
     input: {
       reset: noop,
       take: () => false,
       keys: new Set(),
-      movement: () => new THREE.Vector2(),
+      movement: () => new Vec2(),
       endFrame: noop,
     },
-    renderer: { render: noop, setAnimationLoop: noop },
-    clock: { getDelta: () => 1 / 60 },
     campaign: new Campaign(storage()),
     state: STATES.PLAYING,
     score: 0,
@@ -59,7 +70,6 @@ function harness() {
     lives: 5,
     best: 0,
   });
-  g.scene.add(g.world);
   return g;
 }
 function collectAll(g) {
@@ -143,7 +153,7 @@ test("checkpoint survives JSON roundtrip with caught aliens, scattered sweets an
   assert.equal(g.collected, count);
   assert.equal(g.score, score);
   assert.equal(g.caught, 1);
-  assert.equal(g.aliens[0].root.visible, false);
+  assert.equal(g.aliens[0].root.isEnabled(false), false);
   assert.equal(g.tokens, 1);
   assert.equal(g.timeLeft, 301);
   assert.deepEqual(g.player.pos.toArray(), [0, 0, 64]);
@@ -199,10 +209,10 @@ test("movement, jumping and stun durations are stable across frame rates", () =>
     g.beginChapter(0);
     g.enterLevel();
     g.player.pos.set(0, 0, 98);
-    g.input.movement = () => new THREE.Vector2(0, -1);
+    g.input.movement = () => new Vec2(0, -1);
     for (let i = 0; i < hz * 2; i++) g.player.update(1 / hz);
     const z = g.player.pos.z;
-    g.input.movement = () => new THREE.Vector2();
+    g.input.movement = () => new Vec2();
     let jump = true;
     g.input.take = (key) =>
       key === "Space" && jump ? ((jump = false), true) : false;

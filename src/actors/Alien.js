@@ -1,32 +1,17 @@
-import * as THREE from "three";
-import { STATES, LEVELS, SWEETS } from "../config.js";
-import {
-  $,
-  clamp,
-  rand,
-  TAU,
-  v3,
-  fmt,
-  mats,
-  geos,
-  mat,
-  geo,
-  mesh,
-  group,
-  flatRing,
-  instanced,
-} from "../core/primitives.js";
-import { makeHero, makeAlien } from "./models.js";
+import { clamp, v3, place } from "../core/primitives.js";
+import { makeAlienRig } from "./hero/HeroBuilder.js";
 class Alien {
   constructor(game, id, route) {
     this.game = game;
     this.id = id;
     this.route = route.map((p) => v3(p[0], 0, p[1]));
     this.waypoint = 1;
-    this.model = makeAlien(game.world);
-    this.root = this.model.root;
-    this.pos = this.root.position;
-    this.pos.copy(this.route[0]);
+    this.rig = makeAlienRig(game.world);
+    this.model = this.rig;
+    this.root = this.rig.root;
+    for (const m of this.rig.meshes) game.renderer.addCaster(m, false);
+    this.pos = v3().copy(this.route[0]);
+    place(this.root, this.pos);
     this.stunTime = 0;
     this.caught = false;
     this.loot = 4;
@@ -40,7 +25,7 @@ class Alien {
   stun() {
     if (this.caught) return;
     this.stunTime = 2;
-    this.model.stars.visible = true;
+    this.rig.stars.setEnabled(true);
     this.game.audio.play("alien");
     this.game.particles.emit(
       this.pos.clone().add(v3(0, 1.8, 0)),
@@ -56,14 +41,12 @@ class Alien {
     const g = this.game;
     this.age += dt;
     this.stunTime = Math.max(0, this.stunTime - dt);
-    this.model.stars.visible = this.stunTime > 0;
-    this.model.stars.rotation.y += dt * 6;
-    this.model.antennae.forEach(
-      (a, i) => (a.rotation.z = Math.sin(this.age * 9 + i) * 0.25),
-    );
+    this.rig.stars.setEnabled(this.stunTime > 0);
+    this.rig.stars.rotation.y += dt * 6;
     if (this.stunTime > 0) {
-      this.model.body.rotation.z = Math.sin(this.age * 10) * 0.13;
       this.pos.y = 0;
+      this.rig.animate(this.age, 0, true);
+      place(this.root, this.pos);
       if (
         Math.hypot(this.pos.x - g.player.pos.x, this.pos.z - g.player.pos.z) <
           1.35 &&
@@ -101,11 +84,8 @@ class Alien {
       this.pos.addScaledVector(delta, Math.min(distance, this.runSpeed * dt));
     }
     this.pos.y = Math.abs(Math.sin(this.age * 6)) * 0.22;
-    this.model.body.rotation.z = Math.sin(this.age * 6) * 0.13;
-    this.model.feet.forEach(
-      (f, i) =>
-        (f.position.z = 0.08 + Math.sin(this.age * 9 + i * Math.PI) * 0.16),
-    );
+    this.rig.animate(this.age, Math.min(1, this.runSpeed / 3), false);
+    place(this.root, this.pos);
     this.dropClock -= dt;
     if (this.dropClock <= 0 && this.loot > 1) {
       this.loot--;
@@ -114,10 +94,16 @@ class Alien {
       g.particles.emit(this.pos, 0xffd467, 10, 1, 0.5);
     }
   }
+  /** Menu idle: bob and look around in place. */
+  idle(t) {
+    this.rig.animate(t, 0.15, false, Math.abs(Math.sin(t * 3)) * 0.06);
+    place(this.root, this.pos);
+  }
   catch() {
     this.caught = true;
-    this.root.visible = false;
+    this.root.setEnabled(false);
     const g = this.game;
+    g.kick(0.35, 0.09);
     g.caught++;
     g.score += 100;
     g.collectibles.scatter(this.pos, this.loot, this.id);

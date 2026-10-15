@@ -1,5 +1,6 @@
-import * as THREE from "three";
 import { mesh, group, flatRing, v3, instanced } from "../core/primitives.js";
+import { slab, surfaceMat } from "../engine/prims.js";
+import { textureSet } from "../engine/textures.js";
 
 export const ZONES = [
   ["Festival lane", "Lantern market", "Temple approach", "The stolen table"],
@@ -17,19 +18,18 @@ export function extendRoute(builder, index) {
   g.spawn = v3(0, 0, 98);
   g.zone = -1;
   g.tokens = 0;
-  mesh(w, "box", g.config.ground, [0, -0.3, 62], [35, 0.6, 84]);
-  mesh(
+  slab(w, [0, -0.3, 62], [35, 0.6, 84], surfaceMat(g.config.surface, g.config.ground, 0.92, textureSet), 4);
+  slab(
     w,
-    "box",
-    index === 3
-      ? 0xc97656
-      : index === 2
-        ? 0x727247
-        : index === 1
-          ? 0xc0a67b
-          : 0x657283,
-    [0, 0.012, 61],
-    [8, 0.025, 84],
+    [0, -0.005, 61],
+    [8, 0.02, 84],
+    surfaceMat(
+      g.config.surface,
+      index === 3 ? 0xd08868 : index === 2 ? 0x8c8a62 : index === 1 ? 0xe6cfa0 : 0x8a8a96,
+      0.85,
+      textureSet,
+    ),
+    2,
   );
   // Keep six sweets from the original arena and put thirty along the new route.
   g.collectibles.items = g.collectibles.items.filter((_, i) => i % 3 === 0);
@@ -69,13 +69,7 @@ export function extendRoute(builder, index) {
     const z = 38 + section * 27;
     if (index === 0) {
       for (const side of [-1, 1]) {
-        mesh(
-          w,
-          "box",
-          section % 2 ? 0xb57783 : 0x598d9d,
-          [side * 20, 3, z],
-          [7, 6, 18],
-        );
+        builder.wall(side * 20, 3, z, 7, 6, 18, section % 2 ? 0xb57783 : 0x598d9d);
         mesh(w, "box", 0xffc776, [side * 16.4, 2.4, z], [0.1, 1.6, 2.1], 0.35);
         mesh(
           w,
@@ -150,6 +144,12 @@ export function extendRoute(builder, index) {
   }
 }
 
+export function lightCheckpoint(builder, c) {
+  c.active = true;
+  c.root.dispose();
+  c.root = flatRing(builder.game.world, 0, c.z, 2.5, 0xd7f96a, 0.9);
+}
+
 export function updateRoute(builder, dt) {
   const g = builder.game,
     p = g.player.pos;
@@ -160,9 +160,7 @@ export function updateRoute(builder, dt) {
   }
   for (const c of builder.checkpoints || []) {
     if (!c.active && Math.hypot(p.x, p.z - c.z) < 2.5 && p.y < 1) {
-      c.active = true;
-      c.root.material = c.root.material.clone();
-      c.root.material.color.setHex(0xd7f96a);
+      lightCheckpoint(builder, c);
       g.spawn.set(0, 0, c.z);
       g.saveCheckpoint();
       g.hud.toast(
@@ -181,7 +179,7 @@ export function updateRoute(builder, dt) {
     token.root.position.y = 2.2 + Math.sin(g.elapsed * 2) * 0.12;
     if (Math.hypot(p.x - token.x, p.z - token.z) < 1 && p.y > 0.45) {
       token.alive = false;
-      token.root.visible = false;
+      token.root.setEnabled(false);
       g.tokens++;
       g.score += 250;
       g.audio.play("power");

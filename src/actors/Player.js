@@ -1,27 +1,15 @@
-import * as THREE from "three";
-import { STATES, LEVELS, SWEETS } from "../config.js";
-import {
-  $,
-  clamp,
-  rand,
-  TAU,
-  v3,
-  fmt,
-  mats,
-  geos,
-  mat,
-  geo,
-  mesh,
-  group,
-  flatRing,
-  instanced,
-} from "../core/primitives.js";
-import { makeHero, makeAlien } from "./models.js";
+import { clamp, rand, v3, place } from "../core/primitives.js";
+import { Vec2, lerp, angleDelta } from "../core/math.js";
+import { makeHero } from "./hero/HeroBuilder.js";
 class Player {
   constructor(game) {
     this.game = game;
-    Object.assign(this, makeHero(game.world));
-    this.pos = this.root.position;
+    this.rig = makeHero(game.world);
+    this.root = this.rig.root;
+    for (const m of this.rig.meshes) game.renderer.addCaster(m, false);
+    this.pos = v3();
+    this.prevVel = v3();
+    this.turnRate = 0;
     this.velocity = v3();
     this.facing = v3(0, 0, -1);
     this.invuln = 0;
@@ -50,7 +38,16 @@ class Player {
         0;
     this.grounded = true;
     this.coyote = 0.12;
-    this.root.visible = true;
+    this.root.setEnabled(true);
+    place(this.root, this.pos);
+  }
+  /** Animation-only update used by menus, the hero viewer and cut-scenes. */
+  pose(dt, { celebrate = false } = {}) {
+    const a = this.rig.animator;
+    const pose = a.update(dt, { speed: 0, grounded: true, vy: 0, dashing: false, turnRate: 0, celebrate });
+    a.events.length = 0;
+    this.rig.applyPose(pose, a.hipY);
+    place(this.root, this.pos);
   }
   update(dt) {
     const g = this.game,
@@ -85,31 +82,23 @@ class Player {
       this.invuln = Math.max(this.invuln, 0.3);
       g.audio.tone(140, 0.15, "triangle", 0.12, 440);
     }
+    this.turnRate = 0;
     if (dir.length() > 0.08) {
       this.facing.set(dir.x, 0, dir.y).normalize();
       const desired = Math.atan2(this.facing.x, this.facing.z),
-        delta = Math.atan2(
-          Math.sin(desired - this.root.rotation.y),
-          Math.cos(desired - this.root.rotation.y),
-        );
-      this.root.rotation.y += delta * (1 - Math.exp(-18 * dt));
+        delta = angleDelta(this.root.rotation.y, desired);
+      const step = delta * (1 - Math.exp(-14 * dt));
+      this.root.rotation.y += step;
+      this.turnRate = dt > 0 ? step / dt : 0;
     }
     const speed = this.dashTime > 0 ? 17 : this.coffee > 0 ? 9.1 : 6.7,
       desired =
         this.dashTime > 0
-          ? new THREE.Vector2(this.facing.x, this.facing.z)
+          ? new Vec2(this.facing.x, this.facing.z)
           : dir,
       smooth = 1 - Math.exp(-20 * dt);
-    this.velocity.x = THREE.MathUtils.lerp(
-      this.velocity.x,
-      desired.x * speed,
-      smooth,
-    );
-    this.velocity.z = THREE.MathUtils.lerp(
-      this.velocity.z,
-      desired.y * speed,
-      smooth,
-    );
+    this.velocity.x = lerp(this.velocity.x, desired.x * speed, smooth);
+    this.velocity.z = lerp(this.velocity.z, desired.y * speed, smooth);
     // Axis-separated AABB collision permits sliding along stalls without snagging.
     this.pos.x = clamp(
       this.pos.x + this.velocity.x * dt,
@@ -144,29 +133,32 @@ class Player {
       this.grounded = true;
     }
     const running = Math.hypot(this.velocity.x, this.velocity.z);
-    this.walk += dt * running * 1.9;
-    this.arms.forEach(
-      (a, i) =>
-        (a.rotation.x = this.grounded
-          ? Math.sin(this.walk + i * Math.PI) * Math.min(0.7, running * 0.11)
-          : -0.8),
-    );
-    this.legs.forEach(
-      (l, i) =>
-        (l.rotation.x = this.grounded
-          ? Math.sin(this.walk + i * Math.PI) * Math.min(0.6, running * 0.08)
-          : i === 0
-            ? -0.4
-            : 0.45),
-    );
-    this.body.position.y = this.grounded ? Math.sin(this.walk * 2) * 0.035 : 0;
-    this.arms.forEach((a) => {
-      if (a.userData.elbow)
-        a.userData.elbow.rotation.x = -0.15 - Math.min(0.5, running * 0.04);
+    const a = this.rig.animator;
+    const pose = a.update(dt, {
+      speed: running,
+      grounded: this.grounded,
+      vy: this.velocity.y,
+      dashing: this.dashTime > 0,
+      turnRate: this.turnRate,
+      accelX: dt > 0 ? (this.velocity.x - this.prevVel.x) / dt : 0,
+      accelZ: dt > 0 ? (this.velocity.z - this.prevVel.z) / dt : 0,
+      celebrate: false,
     });
-    this.body.rotation.z = Math.sin(g.elapsed * 2) * 0.025;
-    this.root.visible =
-      this.invuln <= 1 || Math.floor(this.invuln * 14) % 2 === 0;
+    this.prevVel.copy(this.velocity);
+    for (const e of a.events) {
+      if (e === "step") {
+        g.audio.play("step");
+        if (running > 5) g.particles.dust(this.pos, 2, g.config?.dust ?? 0xd9c8b0, 0.8);
+      } else if (e === "land") {
+        g.audio.play("land");
+        g.particles.dust(this.pos, 9, g.config?.dust ?? 0xd9c8b0);
+      }
+    }
+    a.events.length = 0;
+    this.rig.applyPose(pose, a.hipY);
+    // Blink while invulnerable after damage.
+    this.root.setEnabled(this.invuln <= 1 || Math.floor(this.invuln * 14) % 2 === 0);
+    place(this.root, this.pos);
     if (
       (input.take("KeyE") || input.keys.has("KeyE")) &&
       this.throwCooldown === 0
@@ -204,6 +196,8 @@ class Player {
     this.dashTime = 0;
     g.audio.play("hurt");
     g.particles.emit(this.pos.clone().add(v3(0, 1, 0)), 0xffa979, 18, 3, 0.7);
+    this.rig.animator.hurt();
+    g.kick(0.7, 0.08);
     g.hud.flash = 0.32;
     g.hud.toast(
       [
